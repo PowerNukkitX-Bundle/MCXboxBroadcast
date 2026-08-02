@@ -1,92 +1,103 @@
-# MCXboxBroadcast
-[![License: GPL-3.0](https://img.shields.io/github/license/MCXboxBroadcast/Broadcaster)](LICENSE)
-[![Build Release](https://github.com/MCXboxBroadcast/Broadcaster/actions/workflows/release.yml/badge.svg)](https://github.com/MCXboxBroadcast/Broadcaster/actions/workflows/release.yml)
+# MCXboxBroadcast for PowerNukkitX
+
+[![License: GPL-3.0](https://img.shields.io/github/license/PowerNukkitX-Bundle/MCXboxBroadcast)](LICENSE)
+[![Build and Release](https://github.com/PowerNukkitX-Bundle/MCXboxBroadcast/actions/workflows/release.yml/badge.svg)](https://github.com/PowerNukkitX-Bundle/MCXboxBroadcast/actions/workflows/release.yml)
 [![Discord](https://img.shields.io/discord/1139621390908133396?label=discord&color=5865F2)](https://discord.gg/Tp3tA2kdCN)
 
-A simple tool that broadcasts an existing [Geyser](https://github.com/GeyserMC/Geyser)/Bedrock server over Xbox Live.
-
-This shows up to the authenticated accounts friends in-game as a joinable session.
+A [PowerNukkitX](https://github.com/PowerNukkitX/PowerNukkitX) plugin that broadcasts your server as a joinable session over Xbox Live. Friends of the authenticated Xbox account can find and join the server directly from Minecraft's Friends tab.
 
 ![Example screenshot](https://user-images.githubusercontent.com/5401186/159083033-b965bfba-de17-4708-8979-1f33bfd5fa28.png)
 
-# DISCLAIMER
-You use this project at your own risk, the contributors are not responsible for any damage or loss caused by the software. We suggest you use an alt account for running the tool in case the account is banned as we emulate some features of a client which may or may not be against TOS.
+## Disclaimer
+
+Use this project at your own risk. The contributors are not responsible for any damage or loss caused by this software. Using a separate Xbox account is recommended because the plugin emulates client functionality that may be subject to Microsoft's terms of service.
 
 ## Features
- - Syncing of MOTD and other server details
- - Automatic friend list management
- - Easy Geyser integration (as an extension)
- - Shows as online and playing Minecraft in the Xbox app and website
- - Multi-account support
- - Web manager for larger networks
- - Uploading of a custom image for the account (see below for more info)
 
-## Pterodactyl Panel
-There is an egg for easy instance creation supplied for [Pterodactyl Panel](https://pterodactyl.io/), this being `egg-m-c-xbox-broadcast.json`
+- Native PowerNukkitX plugin integration
+- Automatic synchronization of MOTD and player counts
+- Automatic Xbox friend and follower management
+- Multi-account support
+- Configurable public address and port
+- Configurable WebRTC/NetherNet ICE port range
+- Optional Slack or Discord notifications
+- Custom Xbox profile showcase image
+- Native PowerNukkitX command parameter tree and client-side suggestions
 
-## Docker
-There is a docker image available for the standalone version of the tool, this can be found at `ghcr.io/mcxboxbroadcast/standalone:latest`
+## Requirements
 
-```bash
-docker run --rm -it -v /path/to/config:/opt/app/config ghcr.io/mcxboxbroadcast/standalone:latest
-```
+- PowerNukkitX with API 3.0.0
+- Java 21 or newer
+- An Xbox account that can play Minecraft
+- A publicly reachable Bedrock server address and port
 
 ## Installation
-### Extension
-1. Download the latest release file `MCXboxBroadcastExtension.jar`
-2. Drop the extension into the Geyser `extensions` folder
-3. Restart the server
-4. Wait for the extension to start and present you with an authentication code
-   - `To sign in, use a web browser to open the page https://www.microsoft.com/link and enter the code XXXXXXXX to authenticate.`
-5. Follow the link and enter the code
-6. Login to the account you want to use
-7. Follow the account on Xbox LIVE
-8. Check the friends tab ingame and you should see the server listed
 
-### Standalone
-1. Download the latest release file `MCXboxBroadcastStandalone.jar`
-2. Start the jar file using `java -jar MCXboxBroadcastStandalone.jar`
-3. Wait for the extension to start and present you with an authentication code
-    - `To sign in, use a web browser to open the page https://www.microsoft.com/link and enter the code XXXXXXXX to authenticate.`
-4. Follow the link and enter the code
-5. Login to the account you want to use
-6. Follow the account on Xbox LIVE
-7. Edit the `config.yml` to have the correct ip and port for the target server
-8. Restart the tool
-9. Check the friends tab ingame and you should see the server listed
+1. Download `MCXboxBroadcast.jar` from the latest GitHub release.
+2. Place it in the PowerNukkitX `plugins` directory.
+3. Start or restart the server.
+4. Wait for the plugin to display a Microsoft device-login URL and authentication code in the console.
+5. Open the displayed URL, enter the code, and sign in with the Xbox account that should advertise the server.
+6. Add or follow that account from another Xbox account.
+7. Open Minecraft's Friends tab. The PowerNukkitX server should appear as a joinable session.
 
-## Manager
-There is a web manager available for donators. After joining the relevent [GitHub sponsors](https://github.com/sponsors/rtm516) tier you will be able to access its builds at https://github.com/MCXboxBroadcast/Manager/releases
+The plugin stores its configuration and authentication data in `plugins/MCXboxBroadcast/`.
 
-Note: This also requires a MongoDB instance to be running
+## Configuration
 
-<details>
-   <summary>Screenshots</summary>
+On its first start, the plugin creates `plugins/MCXboxBroadcast/config.yml`.
 
-   ![Bots view](https://github.com/user-attachments/assets/e4760c93-a146-45b9-b029-fd3c5c6e7bea)
-   ![Bot info](https://github.com/user-attachments/assets/462f1d8b-c8ab-42e0-ab0e-cb335fc00ab4)
-   ![Bot options](https://github.com/user-attachments/assets/f603d51f-f59e-4a49-b2a5-ffeb074109e8)
-   ![Server options](https://github.com/user-attachments/assets/e203eac3-7190-4510-9f5b-ef87de507cab)
-   ![Manager settings](https://github.com/user-attachments/assets/11f85c70-9b50-4039-bddb-961833b7d11e)
-</details>
+The most relevant session settings are:
 
-## Custom Image
-![Custom image](https://github.com/user-attachments/assets/b00832fd-8fa6-4c7a-b764-342bcf6fc037)
+| Setting | Description |
+| --- | --- |
+| `session.remote-address` | Public address advertised to joining players. `auto` attempts to determine it automatically. |
+| `session.remote-port` | Public Bedrock port. `auto` uses the PowerNukkitX listener port. |
+| `session.update-interval` | Interval in seconds for updating the Xbox session. Must be at least 20 seconds. |
+| `session.ice-port-range.min` | Lowest UDP port used for WebRTC/NetherNet, or `0` for the operating-system default. |
+| `session.ice-port-range.max` | Highest UDP port used for WebRTC/NetherNet, or `0` for the operating-system default. |
 
-You can add a custom image to the profile page for the account by placing a `screenshot.jpg` in the same directory as the `config.yml`.
-
-The best settings for this image are `1200x675`, quality `90` and chroma subsampling `4:2:0`.
-
-This can take a few minutes to update on the Xbox Live servers and show ingame.
+When the server is behind NAT, a proxy, or port forwarding, set `remote-address` and `remote-port` to the public values players must use. MOTD, online players, and maximum player count are read directly from PowerNukkitX.
 
 ## Commands
-For the extension version prefix with `/mcxboxbroadcast`
+
+The main command is `/mcxboxbroadcast`; `/mcbroadcast` is available as an alias.
 
 | Command | Description |
 | --- | --- |
-| `exit` (Standalone Only) | Exits the program |
-| `restart` | Restarts the tool |
-| `dumpsession` | Dumps the current session data to files for debugging |
-| `accounts list` | Lists the accounts that are currently in use and their followers count |
-| `accounts add <sub-session-id>` | Adds an account to the list of accounts to use |
-| `accounts remove <sub-session-id>` | Removes an account from the list of accounts to use |
+| `/mcxboxbroadcast restart` | Recreates the Xbox Live session. |
+| `/mcxboxbroadcast dumpsession` | Writes the current and previous session responses to JSON files for debugging. |
+| `/mcxboxbroadcast accounts list` | Lists the active primary and sub-accounts. |
+| `/mcxboxbroadcast accounts add <sub-session-id>` | Adds a sub-account. |
+| `/mcxboxbroadcast accounts remove <sub-session-id>` | Removes a sub-account. |
+| `/mcxboxbroadcast version` | Displays the installed plugin version. |
+
+Except for `version`, commands can only be executed from the server console.
+
+## Custom image
+
+To use a custom showcase image for the Xbox account, place a file named `screenshot.jpg` in `plugins/MCXboxBroadcast/` before restarting the plugin.
+
+Recommended image properties:
+
+- Resolution: `1200x675`
+- JPEG quality: `90`
+- Chroma subsampling: `4:2:0`
+
+Xbox Live may take several minutes to display an updated image.
+
+## Building from source
+
+Clone the repository and run:
+
+```bash
+./gradlew :bootstrap-pnx:build
+```
+
+The finished plugin is created at:
+
+```text
+bootstrap/pnx/build/libs/MCXboxBroadcast.jar
+```
+
+The PowerNukkitX server and protocol dependencies are used for compilation but are not included in the plugin JAR.
