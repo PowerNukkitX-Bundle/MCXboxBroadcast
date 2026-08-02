@@ -6,7 +6,7 @@
 
 A [PowerNukkitX](https://github.com/PowerNukkitX/PowerNukkitX) plugin that broadcasts your server as a joinable session over Xbox Live. Friends of the authenticated Xbox account can find and join the server directly from Minecraft's Friends tab.
 
-![Example screenshot](https://user-images.githubusercontent.com/5401186/159083033-b965bfba-de17-4708-8979-1f33bfd5fa28.png)
+![Example screenshot](https://github.com/user-attachments/assets/0af59bd6-eedf-4d64-94fb-5d66260b0454)
 
 ## Disclaimer
 
