@@ -14,15 +14,28 @@ import org.cloudburstmc.math.vector.Vector3f;
 import org.cloudburstmc.math.vector.Vector3i;
 import org.cloudburstmc.nbt.NbtMap;
 import org.cloudburstmc.protocol.bedrock.BedrockServerSession;
-import org.cloudburstmc.protocol.bedrock.data.AuthoritativeMovementMode;
 import org.cloudburstmc.protocol.bedrock.data.ChatRestrictionLevel;
+import org.cloudburstmc.protocol.bedrock.data.Difficulty;
 import org.cloudburstmc.protocol.bedrock.data.EduSharedUriResource;
+import org.cloudburstmc.protocol.bedrock.data.EducationEditionOffer;
+import org.cloudburstmc.protocol.bedrock.data.EditorWorldType;
 import org.cloudburstmc.protocol.bedrock.data.GamePublishSetting;
 import org.cloudburstmc.protocol.bedrock.data.GameRuleData;
 import org.cloudburstmc.protocol.bedrock.data.GameType;
+import org.cloudburstmc.protocol.bedrock.data.GeneratorType;
+import org.cloudburstmc.protocol.bedrock.data.LevelSettings;
 import org.cloudburstmc.protocol.bedrock.data.PacketCompressionAlgorithm;
-import org.cloudburstmc.protocol.bedrock.data.PlayerPermission;
+import org.cloudburstmc.protocol.bedrock.data.PlayStatus;
+import org.cloudburstmc.protocol.bedrock.data.PlayerPermissionLevel;
+import org.cloudburstmc.protocol.bedrock.data.ServerAuthMovementMode;
 import org.cloudburstmc.protocol.bedrock.data.SpawnBiomeType;
+import org.cloudburstmc.protocol.bedrock.data.SpawnSettings;
+import org.cloudburstmc.protocol.bedrock.data.SyncedPlayerMovementSettings;
+import org.cloudburstmc.protocol.bedrock.data.payload.common.DimensionType;
+import org.cloudburstmc.protocol.bedrock.data.payload.ServerTelemetryData;
+import org.cloudburstmc.protocol.bedrock.data.payload.editor.ServerEditorConnectionPolicy;
+import org.cloudburstmc.protocol.bedrock.data.payload.experiment.Experiments;
+import org.cloudburstmc.protocol.bedrock.data.payload.pack.PackIdVersion;
 import org.cloudburstmc.protocol.bedrock.packet.BedrockPacket;
 import org.cloudburstmc.protocol.bedrock.packet.BedrockPacketHandler;
 import org.cloudburstmc.protocol.bedrock.packet.ClientCacheStatusPacket;
@@ -77,7 +90,7 @@ public class RedirectPacketHandler implements BedrockPacketHandler {
 
     @Override
     public PacketSignal handle(RequestNetworkSettingsPacket packet) {
-        int clientProtocolVersion = packet.getProtocolVersion();
+        int clientProtocolVersion = packet.getClientNetworkVersion();
         int serverProtocolVersion = Constants.BEDROCK_CODEC.getProtocolVersion();
 
         // The client normally prevents you connecting to a server with a different protocol number
@@ -104,7 +117,7 @@ public class RedirectPacketHandler implements BedrockPacketHandler {
     public PacketSignal handle(LoginPacket packet) {
         if (!networkSettingsRequested) {
             PlayStatusPacket statusPacket = new PlayStatusPacket();
-            statusPacket.setStatus(PlayStatusPacket.Status.LOGIN_FAILED_CLIENT_OLD);
+            statusPacket.setStatus(PlayStatus.LOGIN_FAILED_CLIENT_OLD);
             session.sendPacket(statusPacket);
 
             disconnect();
@@ -112,18 +125,20 @@ public class RedirectPacketHandler implements BedrockPacketHandler {
         }
 
         PlayStatusPacket status = new PlayStatusPacket();
-        status.setStatus(PlayStatusPacket.Status.LOGIN_SUCCESS);
+        status.setStatus(PlayStatus.LOGIN_SUCCESS);
         session.sendPacket(status);
 
         ResourcePacksInfoPacket info = new ResourcePacksInfoPacket();
-        info.setWorldTemplateId(UUID.randomUUID());
-        info.setWorldTemplateVersion("*");
-        info.setVibrantVisualsForceDisabled(true);
-        info.setForcedToAccept(false);
+        PackIdVersion worldTemplate = new PackIdVersion();
+        worldTemplate.setPackUUID(UUID.randomUUID());
+        worldTemplate.setPackVersion("*");
+        info.setWorldTemplateIdAndVersion(worldTemplate);
+        info.setForceDisableVibrantVisuals(true);
+        info.setResourcePackRequired(false);
         session.sendPacket(info);
 
         try {
-            ChainValidationResult result = EncryptionUtils.validatePayload(packet.getAuthPayload());
+            ChainValidationResult result = EncryptionUtils.validatePayload(packet);
             if (!result.signed()) {
                 throw new IllegalArgumentException("Chain is not signed");
             }
@@ -148,15 +163,17 @@ public class RedirectPacketHandler implements BedrockPacketHandler {
 
     @Override
     public PacketSignal handle(ResourcePackClientResponsePacket packet) {
-        switch (packet.getStatus()) {
-            case COMPLETED:
+        switch (packet.getResponse()) {
+            case RESOURCE_PACK_STACK_FINISHED:
                 sendStartGame();
                 break;
-            case HAVE_ALL_PACKS:
+            case DOWNLOADING_FINISHED:
                 ResourcePackStackPacket stack = new ResourcePackStackPacket();
-                stack.setExperimentsPreviouslyToggled(false);
-                stack.setForcedToAccept(false);
-                stack.setGameVersion("*");
+                Experiments experiments = new Experiments();
+                experiments.setExperimentsEverToggled(false);
+                stack.setExperiments(experiments);
+                stack.setTexturePackRequired(false);
+                stack.setBaseGameVersion("*");
                 session.sendPacket(stack);
                 break;
             default:
@@ -169,74 +186,93 @@ public class RedirectPacketHandler implements BedrockPacketHandler {
     @SuppressWarnings("deprecation")
     public void sendStartGame() {
         StartGamePacket startGamePacket = new StartGamePacket();
-        startGamePacket.setUniqueEntityId(1);
-        startGamePacket.setRuntimeEntityId(1);
-        startGamePacket.setPlayerGameType(GameType.CREATIVE);
-        startGamePacket.setPlayerPosition(Vector3f.from(0, 64 + 2, 0));
+        startGamePacket.setEntityID(1);
+        startGamePacket.setRuntimeID(1);
+        startGamePacket.setGameType(GameType.CREATIVE);
+        startGamePacket.setPosition(Vector3f.from(0, 64 + 2, 0));
         startGamePacket.setRotation(Vector2f.ONE);
         startGamePacket.setPlayerPropertyData(NbtMap.EMPTY);
 
-        startGamePacket.setSeed(0L);
-        startGamePacket.setDimensionId(2);
-        startGamePacket.setGeneratorId(1);
-        startGamePacket.setSpawnBiomeType(SpawnBiomeType.DEFAULT);
-        startGamePacket.setCustomBiomeName("");
-        startGamePacket.setForceExperimentalGameplay(OptionalBoolean.empty());
-        startGamePacket.setLevelGameType(GameType.CREATIVE);
-        startGamePacket.setDifficulty(0);
-        startGamePacket.setDefaultSpawn(Vector3i.ZERO);
-        startGamePacket.setAchievementsDisabled(true);
-        startGamePacket.setCurrentTick(-1);
-        startGamePacket.setEduEditionOffers(0);
-        startGamePacket.setEduFeaturesEnabled(false);
-        startGamePacket.setEducationProductionId("");
-        startGamePacket.setEduSharedUriResource(EduSharedUriResource.EMPTY);
-        startGamePacket.setRainLevel(0);
-        startGamePacket.setLightningLevel(0);
-        startGamePacket.setMultiplayerGame(true);
-        startGamePacket.setBroadcastingToLan(true);
-        startGamePacket.getGamerules().add(new GameRuleData<>("showcoordinates", false));
-        startGamePacket.setPlatformBroadcastMode(GamePublishSetting.PUBLIC);
-        startGamePacket.setXblBroadcastMode(GamePublishSetting.PUBLIC);
-        startGamePacket.setCommandsEnabled(true);
-        startGamePacket.setChatRestrictionLevel(ChatRestrictionLevel.NONE);
-        startGamePacket.setTexturePacksRequired(false);
-        startGamePacket.setBonusChestEnabled(false);
-        startGamePacket.setStartingWithMap(false);
-        startGamePacket.setTrustingPlayers(true);
-        startGamePacket.setDefaultPlayerPermission(PlayerPermission.VISITOR);
-        startGamePacket.setServerChunkTickRange(4);
-        startGamePacket.setBehaviorPackLocked(false);
-        startGamePacket.setResourcePackLocked(false);
-        startGamePacket.setFromLockedWorldTemplate(false);
-        startGamePacket.setUsingMsaGamertagsOnly(false);
-        startGamePacket.setFromWorldTemplate(false);
-        startGamePacket.setWorldTemplateOptionLocked(false);
+        SpawnSettings spawnSettings = new SpawnSettings();
+        spawnSettings.setType(SpawnBiomeType.DEFAULT);
+        spawnSettings.setUserDefinedBiomeName("");
+        spawnSettings.setDimension(DimensionType.from(2));
 
-        startGamePacket.setServerEngine("");
-        startGamePacket.setLevelId("");
+        LevelSettings levelSettings = new LevelSettings();
+        levelSettings.setSeed(0L);
+        levelSettings.setSpawnSettings(spawnSettings);
+        levelSettings.setGeneratorType(GeneratorType.OVERWORLD);
+        levelSettings.setOverrideForceExperimentalGameplay(OptionalBoolean.empty());
+        levelSettings.setGameType(GameType.CREATIVE);
+        levelSettings.setGameDifficulty(Difficulty.PEACEFUL);
+        levelSettings.setDefaultSpawnBlockPosition(Vector3i.ZERO);
+        levelSettings.setAchievementsDisabled(true);
+        levelSettings.setEditorWorldType(EditorWorldType.NON_EDITOR);
+        levelSettings.setCreatedInEditor(false);
+        levelSettings.setExportedFromEditor(false);
+        levelSettings.setDayCycleStopTime(-1);
+        levelSettings.setEducationEditionOffer(EducationEditionOffer.NONE);
+        levelSettings.setEducationFeaturesEnabled(false);
+        levelSettings.setEducationProductID("");
+        levelSettings.setEduSharedUriResource(EduSharedUriResource.EMPTY);
+        levelSettings.setRainLevel(0);
+        levelSettings.setLightningLevel(0);
+        levelSettings.setMultiplayerGameIntent(true);
+        levelSettings.setLanBroadcastIntent(true);
+        levelSettings.getRuleData().getRulesList().add(new GameRuleData<>("showcoordinates", false));
+        levelSettings.setExperiments(new Experiments());
+        levelSettings.setWereAnyExperimentsEverToggled(false);
+        levelSettings.setPlatformBroadcastSetting(GamePublishSetting.PUBLIC);
+        levelSettings.setXboxLiveBroadcastSetting(GamePublishSetting.PUBLIC);
+        levelSettings.setCommandsEnabled(true);
+        levelSettings.setChatRestrictionLevel(ChatRestrictionLevel.NONE);
+        levelSettings.setTexturePacksRequired(false);
+        levelSettings.setHasBonusChestEnabled(false);
+        levelSettings.setStartWithMapEnabled(false);
+        levelSettings.setTrustingPlayers(true);
+        levelSettings.setPlayerPermissions(PlayerPermissionLevel.VISITOR);
+        levelSettings.setServerChunkTickRange(4);
+        levelSettings.setHasLockedBehaviorPack(false);
+        levelSettings.setHasLockedResourcePack(false);
+        levelSettings.setFromLockedTemplate(false);
+        levelSettings.setUseMsaGamertagsOnly(false);
+        levelSettings.setFromWorldTemplate(false);
+        levelSettings.setWorldTemplateOptionLocked(false);
+        levelSettings.setBaseGameVersion("*");
+        levelSettings.setServerId("");
+        levelSettings.setWorldId("");
+        levelSettings.setScenarioId("");
+        levelSettings.setOwnerId("");
+        levelSettings.setServerEditorConnectionPolicy(ServerEditorConnectionPolicy.MATCH_WORLD_TYPE);
+        startGamePacket.setSettings(levelSettings);
+
+        startGamePacket.setLevelID("");
         startGamePacket.setLevelName("MCXboxBroadcast");
-        startGamePacket.setPremiumWorldTemplateId("");
-        startGamePacket.setWorldTemplateId(new UUID(0, 0));
-        startGamePacket.setCurrentTick(0);
+        startGamePacket.setTemplateContentIdentity("");
+        startGamePacket.setWorldTemplateID(new UUID(0, 0));
+        startGamePacket.setLevelCurrentTime(0);
         startGamePacket.setEnchantmentSeed(0);
         startGamePacket.setMultiplayerCorrelationId("");
-        startGamePacket.setVanillaVersion("*");
+        startGamePacket.setServerVersion("*");
 
-        startGamePacket.setAuthoritativeMovementMode(AuthoritativeMovementMode.SERVER);
-        startGamePacket.setRewindHistorySize(0);
-        startGamePacket.setServerAuthoritativeBlockBreaking(false);
+        startGamePacket.setMovementSettings(new SyncedPlayerMovementSettings(
+            ServerAuthMovementMode.SERVER_AUTHORITATIVE_V3,
+            0,
+            false
+        ));
 
-        startGamePacket.setServerId("");
-        startGamePacket.setWorldId("");
-        startGamePacket.setScenarioId("");
-        startGamePacket.setOwnerId("");
+        ServerTelemetryData telemetryData = new ServerTelemetryData();
+        telemetryData.setServerId("");
+        telemetryData.setScenarioId("");
+        telemetryData.setWorldId("");
+        telemetryData.setOwnerId("");
+        startGamePacket.setServerTelemetryData(telemetryData);
 
         session.sendPacket(startGamePacket);
 
         TransferPacket transferPacket = new TransferPacket();
-        transferPacket.setAddress(sessionInfo.getIp());
-        transferPacket.setPort(sessionInfo.getPort());
+        transferPacket.setServerAddress(sessionInfo.getIp());
+        transferPacket.setServerPort(sessionInfo.getPort());
         session.sendPacket(transferPacket);
 
         try {

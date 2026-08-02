@@ -11,6 +11,10 @@ val nativePlatforms = listOf(
     "macos-aarch64"
 )
 
+repositories {
+    maven("https://repo.powernukkitx.org/releases")
+}
+
 dependencies {
     api(libs.gson)
     api(libs.java.websocket)

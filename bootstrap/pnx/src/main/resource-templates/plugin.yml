@@ -1,0 +1,8 @@
+name: MCXboxBroadcast
+main: com.rtm516.mcxboxbroadcast.bootstrap.pnx.MCXboxBroadcastPlugin
+api: "3.0.0"
+load: POSTWORLD
+author: MCXboxBroadcast
+description: Broadcasts a PowerNukkitX server over Xbox Live.
+website: https://github.com/MCXboxBroadcast/Broadcaster
+version: {{ version }}
