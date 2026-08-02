@@ -16,6 +16,7 @@ repositories {
     maven("https://s01.oss.sonatype.org/content/repositories/snapshots/")
     maven("https://jitpack.io")
     maven("https://maven.lenni0451.net/snapshots")
+    maven("https://repo.powernukkitx.org/releases")
 }
 
 group = properties["group"] as String
