@@ -151,6 +151,7 @@ public class RedirectPacketHandler implements BedrockPacketHandler {
 
             identityData = result.identityClaims().extraData;
         } catch (AssertionError | Exception error) {
+            logger.debug("Failed to validate login packet: " + logger.getStackTrace(error));
             disconnect("disconnect.loginFailed");
         }
         return PacketSignal.HANDLED;
