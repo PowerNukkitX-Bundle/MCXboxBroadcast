@@ -130,8 +130,8 @@ public class RedirectPacketHandler implements BedrockPacketHandler {
 
         ResourcePacksInfoPacket info = new ResourcePacksInfoPacket();
         PackIdVersion worldTemplate = new PackIdVersion();
-        worldTemplate.setPackUUID(UUID.randomUUID());
-        worldTemplate.setPackVersion("*");
+        worldTemplate.setPackUUID(new UUID(0, 0));
+        worldTemplate.setPackVersion("");
         info.setWorldTemplateIdAndVersion(worldTemplate);
         info.setForceDisableVibrantVisuals(true);
         info.setResourcePackRequired(false);
