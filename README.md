@@ -27,7 +27,7 @@ Use this project at your own risk. The contributors are not responsible for any 
 ## Requirements
 
 - PowerNukkitX with API 3.0.0
-- Java 21 or newer
+- Java 25 or newer
 - An Xbox account that can play Minecraft
 - A publicly reachable Bedrock server address and port
 

@@ -21,7 +21,11 @@ repositories {
 
 group = properties["group"] as String
 version = properties["version"] as String
-java.sourceCompatibility = JavaVersion.VERSION_17
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(25))
+    }
+}
 
 publishing {
     publications.create<MavenPublication>("maven") {
