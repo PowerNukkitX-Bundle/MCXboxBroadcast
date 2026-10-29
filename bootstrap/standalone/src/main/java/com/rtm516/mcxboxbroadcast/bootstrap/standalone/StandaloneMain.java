@@ -12,7 +12,7 @@ import com.rtm516.mcxboxbroadcast.core.exceptions.SessionCreationException;
 import com.rtm516.mcxboxbroadcast.core.exceptions.SessionUpdateException;
 import com.rtm516.mcxboxbroadcast.core.ping.PingUtil;
 import com.rtm516.mcxboxbroadcast.core.storage.FileStorageManager;
-import org.cloudburstmc.protocol.bedrock.BedrockPong;
+import org.cloudburstmc.netty.channel.nethernet.signaling.PongData;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
@@ -50,9 +50,15 @@ public class StandaloneMain {
         notificationManager = new SlackNotificationManager(logger, config.notifications());
 
         sessionManager = new SessionManager(new FileStorageManager("./cache", "./screenshot.jpg"), notificationManager, logger);
-        sessionManager.setNetherNetPortRange(config.session().icePortRange().min(), config.session().icePortRange().max());
+        sessionManager.setSessionConfig(config.session());
 
         sessionInfo = new SessionInfo(config.session().sessionInfo());
+
+        // Get the server to relay joins to
+        String ip = config.session().remoteAddress();
+        String port = config.session().remotePort();
+        sessionInfo.setIp(ip.equals("auto") ? "127.0.0.1" : ip);
+        sessionInfo.setPort(port.equals("auto") ? 19132 : Integer.parseInt(port));
 
         // Fallback to the gamertag if the host name is empty
         if (sessionInfo.getHostName().isEmpty()) {
@@ -75,7 +81,7 @@ public class StandaloneMain {
 
             // Create a new session manager, but reuse the notification manager as config hasn't been reloaded
             sessionManager = new SessionManager(new FileStorageManager("./cache", "./screenshot.jpg"), notificationManager, logger);
-            sessionManager.setNetherNetPortRange(config.session().icePortRange().min(), config.session().icePortRange().max());
+            sessionManager.setSessionConfig(config.session());
 
             createSession();
         } catch (SessionCreationException | SessionUpdateException e) {
@@ -114,13 +120,19 @@ public class StandaloneMain {
         if (config.session().queryServer()) {
             try {
                 InetSocketAddress addressToPing = new InetSocketAddress(sessionInfo.getIp(), sessionInfo.getPort());
-                BedrockPong pong = PingUtil.ping(addressToPing, 1500, TimeUnit.MILLISECONDS).get();
+                PongData pong = PingUtil.ping(addressToPing, 1500, TimeUnit.MILLISECONDS).get();
 
                 // Update the session information
-                sessionInfo.setHostName(pong.subMotd());
-                sessionInfo.setWorldName(pong.motd());
+                sessionInfo.setHostName(pong.levelName());
+                sessionInfo.setWorldName(pong.serverName());
                 sessionInfo.setPlayers(pong.playerCount());
-                sessionInfo.setMaxPlayers(pong.maximumPlayerCount());
+                sessionInfo.setMaxPlayers(pong.maxPlayerCount());
+
+                // The game type ids match the order of the game modes
+                CoreConfig.SessionConfig.SessionInfo.GameMode[] gameModes = CoreConfig.SessionConfig.SessionInfo.GameMode.values();
+                if (pong.gameType() >= 0 && pong.gameType() < gameModes.length) {
+                    sessionInfo.setGameMode(gameModes[pong.gameType()]);
+                }
 
                 // Fallback to the gamertag if the host name is empty
                 if (sessionInfo.getHostName().isEmpty()) {
@@ -134,6 +146,7 @@ public class StandaloneMain {
                     sessionInfo.setWorldName(config.session().sessionInfo().worldName());
                     sessionInfo.setPlayers(config.session().sessionInfo().players());
                     sessionInfo.setMaxPlayers(config.session().sessionInfo().maxPlayers());
+                    sessionInfo.setGameMode(config.session().sessionInfo().gameMode());
 
                     // Fallback to the gamertag if the host name is empty
                     if (sessionInfo.getHostName().isEmpty()) {

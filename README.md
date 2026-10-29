@@ -19,7 +19,7 @@ Use this project at your own risk. The contributors are not responsible for any 
 - Automatic Xbox friend and follower management
 - Multi-account support
 - Configurable public address and port
-- Configurable WebRTC/NetherNet ICE port range
+- Optional IPv6 relaying
 - Optional Slack or Discord notifications
 - Custom Xbox profile showcase image
 - Native PowerNukkitX command parameter tree and client-side suggestions
@@ -54,8 +54,8 @@ The most relevant session settings are:
 | `session.remote-address` | Public address advertised to joining players. `auto` attempts to determine it automatically. |
 | `session.remote-port` | Public Bedrock port. `auto` uses the PowerNukkitX listener port. |
 | `session.update-interval` | Interval in seconds for updating the Xbox session. Must be at least 20 seconds. |
-| `session.ice-port-range.min` | Lowest UDP port used for WebRTC/NetherNet, or `0` for the operating-system default. |
-| `session.ice-port-range.max` | Highest UDP port used for WebRTC/NetherNet, or `0` for the operating-system default. |
+| `session.hide-old-sessions` | Hides replaced sessions when a session becomes full. |
+| `session.allow-ipv6` | Relays IPv6 candidates to the target server when enabled. |
 
 When the server is behind NAT, a proxy, or port forwarding, set `remote-address` and `remote-port` to the public values players must use. MOTD, online players, and maximum player count are read directly from PowerNukkitX.
 

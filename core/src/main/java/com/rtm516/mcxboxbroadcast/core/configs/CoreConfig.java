@@ -13,7 +13,7 @@ public interface CoreConfig {
     @Comment("Core session settings")
     SessionConfig session();
 
-    @Comment("Friend/follower list sync settings")
+    @Comment("Friend list sync settings")
     FriendSyncConfig friendSync();
 
     @Comment("Notification settings (e.g., Slack/Discord webhook)")
@@ -38,16 +38,14 @@ public interface CoreConfig {
     @ConfigSerializable
     interface SessionConfig {
         @Comment("""
-            The IP address to broadcast, you likely want to change this to
-            your servers public IP""")
-        @ExcludePlatform(platforms = {"Standalone"})
+            The address of the server to relay joins to
+            auto uses the address Geyser is bound to, or 127.0.0.1 for standalone""")
         @DefaultString("auto")
         String remoteAddress();
 
         @Comment("""
-            The port to broadcast, this should be left as auto unless your
-            manipulating the port using network rules or reverse proxies""")
-        @ExcludePlatform(platforms = {"Standalone"})
+            The port of the server to relay joins to
+            auto uses Geyser's Bedrock port, or 19132 for standalone""")
         @DefaultString("auto")
         String remotePort();
 
@@ -80,25 +78,17 @@ public interface CoreConfig {
         SessionInfo sessionInfo();
 
         @Comment("""
-            Restrict the local UDP port range for WebRTC (NetherNet) ICE candidates,
-            so only a small range needs opening behind a firewall or in Docker with
-            host networking. Each in-progress join uses one port (freed once the player
-            is transferred), so this caps concurrent joins, not total players.
-            Leave both at 0 for the OS ephemeral range (default).""")
-        IcePortRange icePortRange();
+            When the session fills up a new one is created and the old one is closed
+            true: Players in the old session lose the friends of friends tag, so their friends can't see the server
+            false: Players in the old session keep the friends of friends tag, but their friends get an error when trying to join""")
+        @DefaultBoolean(true)
+        boolean hideOldSessions();
 
-        @ConfigSerializable
-        interface IcePortRange {
-            @Comment("Lowest UDP port to use, or 0 for the OS default")
-            @DefaultNumeric(0)
-            @NumericRange(from = 0, to = 65535)
-            int min();
-
-            @Comment("Highest UDP port to use, or 0 for the OS default")
-            @DefaultNumeric(0)
-            @NumericRange(from = 0, to = 65535)
-            int max();
-        }
+        @Comment("""
+            Relay IPv6 candidates to the server
+            When false, IPv6 ICE candidates are stripped from relayed offers so players connect over IPv4""")
+        @DefaultBoolean(false)
+        boolean allowIpv6();
 
         @ConfigSerializable
         interface SessionInfo {
@@ -110,6 +100,12 @@ public interface CoreConfig {
             @DefaultString("GeyserMC Demo & Test Server")
             String worldName();
 
+            @Comment("The game mode to broadcast (Survival, Creative, Adventure)")
+            default GameMode gameMode() {
+                return GameMode.Survival;
+            }
+            void gameMode(GameMode mode);
+
             @Comment("The current number of players")
             @DefaultNumeric(0)
             int players();
@@ -118,14 +114,11 @@ public interface CoreConfig {
             @DefaultNumeric(20)
             int maxPlayers();
 
-            @Comment("The IP address of the server")
-            @DefaultString("test.geysermc.org")
-            String ip();
-
-            @Comment("The port of the server")
-            @DefaultNumeric(19132)
-            @NumericRange(from = 1, to = 65535)
-            int port();
+            enum GameMode {
+                Survival,
+                Creative,
+                Adventure
+            }
         }
     }
 
@@ -138,13 +131,9 @@ public interface CoreConfig {
         @NumericRange(from = 20, to = Integer.MAX_VALUE)
         int updateInterval();
 
-        @Comment("Should we automatically follow people that follow us")
+        @Comment("Should we automatically accept friend requests")
         @DefaultBoolean(true)
-        boolean autoFollow();
-
-        @Comment("Should we automatically unfollow people that no longer follow us")
-        @DefaultBoolean(true)
-        boolean autoUnfollow();
+        boolean autoFriend();
 
         @Comment("Should we automatically send an invite when a friend is added")
         @DefaultBoolean(true)

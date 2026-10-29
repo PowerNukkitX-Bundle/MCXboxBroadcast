@@ -1,6 +1,7 @@
 package com.rtm516.mcxboxbroadcast.core.configs;
 
 import org.spongepowered.configurate.CommentedConfigurationNode;
+import org.spongepowered.configurate.ConfigurationNode;
 import org.spongepowered.configurate.ConfigurateException;
 import org.spongepowered.configurate.interfaces.InterfaceDefaultOptions;
 import org.spongepowered.configurate.objectmapping.meta.Processor;
@@ -13,6 +14,7 @@ import java.io.File;
 import java.util.Arrays;
 
 import static org.spongepowered.configurate.NodePath.path;
+import static org.spongepowered.configurate.transformation.TransformAction.remove;
 import static org.spongepowered.configurate.transformation.TransformAction.rename;
 
 public class ConfigLoader {
@@ -35,6 +37,33 @@ public class ConfigLoader {
             .addAction(path("friend-sync", "expire-check"), renameAndMove("friend-sync", "expiry", "check"))
 
             .build())
+        .addVersion(3, ConfigurationTransformation.empty())
+        .addVersion(4, ConfigurationTransformation.empty())
+        .addVersion(5, ConfigurationTransformation.builder()
+            .addAction(path("friend-sync", "auto-follow"), rename("auto-friend"))
+            .addAction(path("friend-sync", "auto-unfollow"), remove())
+            .build())
+        .addVersion(6, ConfigurationTransformation.builder()
+            .addAction(path("session", "ice-port-range"), remove())
+            .build())
+        .addVersion(7, ConfigurationTransformation.builder()
+            .addAction(path("session"), (path, value) -> {
+                ConfigurationNode sessionInfo = value.node("session-info");
+                if (sessionInfo.hasChild("ip")) {
+                    // Standalone, the server address moved out of session-info
+                    value.node("remote-address").set(sessionInfo.node("ip").raw());
+                    value.node("remote-port").set(sessionInfo.node("port").raw());
+                    sessionInfo.removeChild("ip");
+                    sessionInfo.removeChild("port");
+                } else {
+                    // Extension, these were the public address to broadcast so reset them to auto
+                    value.removeChild("remote-address");
+                    value.removeChild("remote-port");
+                }
+                return null;
+            })
+            .build())
+        .addVersion(8, ConfigurationTransformation.empty())
         .build();
 
     public static CoreConfig loadConfig(File configFile, String platformName) throws ConfigurateException {

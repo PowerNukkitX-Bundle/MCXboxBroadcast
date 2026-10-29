@@ -2,7 +2,6 @@ package com.rtm516.mcxboxbroadcast.core;
 
 import com.github.mizosoft.methanol.Methanol;
 import com.google.gson.JsonParseException;
-import com.google.gson.JsonParser;
 import com.rtm516.mcxboxbroadcast.core.exceptions.AgeVerificationException;
 import com.rtm516.mcxboxbroadcast.core.exceptions.SessionCreationException;
 import com.rtm516.mcxboxbroadcast.core.exceptions.SessionUpdateException;
@@ -12,16 +11,7 @@ import com.rtm516.mcxboxbroadcast.core.models.session.SessionRef;
 import com.rtm516.mcxboxbroadcast.core.models.session.SocialSummaryResponse;
 import com.rtm516.mcxboxbroadcast.core.notifications.NotificationManager;
 import com.rtm516.mcxboxbroadcast.core.storage.StorageManager;
-import com.rtm516.mcxboxbroadcast.core.nethernet.BroadcasterChannelInitializer;
-import dev.kastle.netty.channel.nethernet.NetherNetChannelFactory;
-import dev.kastle.netty.channel.nethernet.config.NetherChannelOption;
-import dev.kastle.netty.channel.nethernet.signaling.NetherNetXboxRpcSignaling;
-import dev.kastle.webrtc.PeerConnectionFactory;
-import dev.kastle.webrtc.PortAllocatorConfig;
-import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.Channel;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
+import com.rtm516.mcxboxbroadcast.core.nethernet.HttpRelaySignaling;
 import net.raphimc.minecraftauth.bedrock.BedrockAuthManager;
 
 import java.io.File;
@@ -56,12 +46,12 @@ public abstract class SessionManagerCore {
 
     protected boolean initialized = false;
 
-    private Channel netherNetChannel;
-    private EventLoopGroup bossGroup;
-    private EventLoopGroup workerGroup;
-    private NetherNetXboxRpcSignaling signaling;
+    /**
+     * Whether IPv6 candidates are relayed to the target server, or stripped so players connect over IPv4
+     */
+    protected boolean allowIpv6 = false;
 
-    private PortAllocatorConfig netherNetPortAllocatorConfig;
+    private HttpRelaySignaling signaling;
 
     /**
      * Create an instance of SessionManager
@@ -170,12 +160,7 @@ public abstract class SessionManagerCore {
             return;
         }
 
-        int friendCount = -1;
-        try {
-            friendCount = friendManager.get().size();
-        } catch (Exception ignored) {}
-
-        logger.info("Successfully authenticated as " + getGamertag() + " (" + getXuid() + ") with " + friendCount + "/" + Constants.MAX_FRIENDS + " friends");
+        logger.info("Successfully authenticated as " + getGamertag() + " (" + getXuid() + ") with " + socialSummary().targetFriendCount() + "/" + Constants.MAX_FRIENDS + " friends");
 
         if (handleFriendship()) {
             logger.info("Waiting for friendship to be processed...");
@@ -200,7 +185,9 @@ public abstract class SessionManagerCore {
         authManager.setOnDeviceTokenRefreshCallback(() -> {
             try {
                 logger.debug("Device token refreshed, recreating session...");
-                createSession();
+                synchronized (this) {
+                    createSession();
+                }
                 logger.debug("Session recreated after device token refresh");
             } catch (Exception e) {
                 logger.error("Failed to recreate session after device token refresh", e);
@@ -224,15 +211,6 @@ public abstract class SessionManagerCore {
      * @throws SessionUpdateException If the updating of the session information fails
      */
     private void createSession() throws SessionCreationException, SessionUpdateException {
-        // Get the token for authentication
-        BedrockAuthManager manager = getAuthManager();
-        String token;
-        try {
-            token = manager.getXboxLiveXstsToken().getUpToDate().getAuthorizationHeader();
-        } catch (Exception e) {
-             throw new SessionCreationException("Failed to get authorization headers: " + e.getMessage());
-        }
-
         // We only need a websocket for the primary session manager
         if (this.sessionInfo != null) {
             // Update the current session XUID
@@ -253,8 +231,8 @@ public abstract class SessionManagerCore {
 
             setupNetherNet();
 
-            if (this.netherNetChannel == null || !this.netherNetChannel.isOpen()) {
-                throw new SessionCreationException("Unable to start NetherNet channel");
+            if (this.signaling == null || !this.signaling.isActive()) {
+                throw new SessionCreationException("Unable to start NetherNet signaling");
             }
         }
 
@@ -265,6 +243,33 @@ public abstract class SessionManagerCore {
             if (galleryManager.setShowcase(imageFile)) {
                 logger.info("Successfully set showcase image");
             }
+        }
+
+        publishSession();
+
+        onSessionCreated();
+    }
+
+    /**
+     * Called after the session has been (re)created and published
+     */
+    protected void onSessionCreated() {
+    }
+
+    /**
+     * Push the session to the session directory and create an activity handle for it
+     * This is safe to call again without recreating the websocket or NetherNet connections
+     *
+     * @throws SessionCreationException If the creation of the session handle fails
+     * @throws SessionUpdateException If the updating of the session information fails
+     */
+    protected void publishSession() throws SessionCreationException, SessionUpdateException {
+        // Get the token for authentication
+        String token;
+        try {
+            token = getAuthManager().getXboxLiveXstsToken().getUpToDate().getAuthorizationHeader();
+        } catch (Exception e) {
+            throw new SessionCreationException("Failed to get authorization headers: " + e.getMessage());
         }
 
         // Push the session information to the session directory
@@ -373,16 +378,15 @@ public abstract class SessionManagerCore {
      * Check the connections we depend on and if any are down re-open them and re-create the session
      * This should be called before any updates to the session otherwise they might fail
      */
-    protected void checkConnection() {
+    protected synchronized void checkConnection() {
         boolean rtaIsOpen = this.rtaWebsocket != null && this.rtaWebsocket.isOpen();
-        boolean rtcIsOpen = this.netherNetChannel != null && this.netherNetChannel.isOpen();
         boolean signalingIsOpen = this.signaling != null && this.signaling.isActive();
 
         // Check if the connection is Lost
-        if (!rtaIsOpen || !rtcIsOpen || !signalingIsOpen) {
+        if (!rtaIsOpen || !signalingIsOpen) {
             try {
                 logger.warn("Connection to websocket lost, re-creating session...");
-                logger.debug("WebSocket status: RTA Open: " + rtaIsOpen + ", RTC Open: " + rtcIsOpen + ", Signaling: " + signalingIsOpen);
+                logger.debug("WebSocket status: RTA Open: " + rtaIsOpen + ", Signaling: " + signalingIsOpen);
 
                 createSession();
                 logger.info("WebSocket session reconnected");
@@ -426,73 +430,21 @@ public abstract class SessionManagerCore {
         rtaWebsocket.connect();
     }
 
-    /**
-     * Restrict the local UDP port range used for WebRTC (NetherNet) ICE candidates.
-     * Passing 0 for both min and max keeps the transport default (the OS ephemeral
-     * range).
-     *
-     * @param min The lowest UDP port to use, or 0 for the OS default
-     * @param max The highest UDP port to use, or 0 for the OS default
-     */
-    public void setNetherNetPortRange(int min, int max) {
-        if (min <= 0 && max <= 0) {
-            this.netherNetPortAllocatorConfig = null;
-            return;
-        }
-
-        // Setting the channel option replaces the whole PortAllocatorConfig, so the
-        // transport's default flags (see DefaultNetherChannelConfig) are mirrored
-        // here and only the port range is overridden.
-        PortAllocatorConfig config = new PortAllocatorConfig()
-            .setDisableTcp(true)
-            .setEnableIpv6(true)
-            .setEnableIpv6OnWifi(true)
-            .setEnableAnyAddressPorts(true)
-            .setEnableSharedSocket(true);
-        config.minPort = min;
-        config.maxPort = max;
-
-        this.netherNetPortAllocatorConfig = config;
-    }
-
-    /**
-     * @return The WebRTC port allocator config to use for NetherNet, or null to use
-     *         the transport default
-     */
-    protected PortAllocatorConfig netherNetPortAllocatorConfig() {
-        return netherNetPortAllocatorConfig;
-    }
-
     protected void setupNetherNet() {
         shutdownNetherNet();
 
         long netherNetId = this.sessionInfo.getNetherNetId().longValue();
 
-        this.signaling = new NetherNetXboxRpcSignaling(netherNetId, getMCTokenHeader());
+        this.signaling = new HttpRelaySignaling(netherNetId, getMCTokenHeader(), InetSocketAddress.createUnresolved(sessionInfo.getIp(), sessionInfo.getPort()), storageManager.playerHistory(), allowIpv6, logger);
+
         this.sessionInfo.setPmsgId(getAuthManager().getMinecraftSession().getCached().getParsedToken().getPayload().reqString("pmid"));
 
-        this.bossGroup = new NioEventLoopGroup(1);
-        this.workerGroup = new NioEventLoopGroup();
-
         try {
-            ServerBootstrap b = new ServerBootstrap();
-            b.group(bossGroup, workerGroup)
-                .channelFactory(NetherNetChannelFactory.server(new PeerConnectionFactory(), signaling))
-                .childHandler(new BroadcasterChannelInitializer(sessionInfo, this, logger));
+            this.signaling.connect(null).get(Constants.WEBSOCKET_CONNECTION_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
 
-            PortAllocatorConfig portAllocatorConfig = netherNetPortAllocatorConfig();
-            if (portAllocatorConfig != null) {
-                b.option(NetherChannelOption.NETHER_PORT_ALLOCATOR_CONFIG, portAllocatorConfig);
-            }
-
-            this.netherNetChannel = b.bind(new InetSocketAddress(0)).sync().channel();
-
-            logger.info("NetherNet Broadcaster started on ID: " + netherNetId
-                + (portAllocatorConfig != null
-                    ? " (ICE ports " + portAllocatorConfig.minPort + "-" + portAllocatorConfig.maxPort + ")"
-                    : ""));
+            logger.info("NetherNet signaling started on ID: " + netherNetId);
         } catch (Exception e) {
-            logger.error("Failed to start NetherNet", e);
+            logger.error("Failed to start NetherNet signaling", e);
         }
     }
 
@@ -510,21 +462,9 @@ public abstract class SessionManagerCore {
     }
 
     private void shutdownNetherNet() {
-        if (netherNetChannel != null) {
-            netherNetChannel.close();
-            netherNetChannel = null;
-        }
         if (signaling != null) {
             signaling.close();
             signaling = null;
-        }
-        if (bossGroup != null) {
-            bossGroup.shutdownGracefully();
-            bossGroup = null;
-        }
-        if (workerGroup != null) {
-            workerGroup.shutdownGracefully();
-            workerGroup = null;
         }
     }
 
@@ -564,13 +504,14 @@ public abstract class SessionManagerCore {
     }
 
     /**
-     * Get the current follower count for the current user
-     * @return The current follower count
+     * Get the social summary for the current user
+     * @return The current social summary
      */
     public SocialSummaryResponse socialSummary() {
         HttpRequest socialSummaryRequest = HttpRequest.newBuilder()
             .uri(Constants.SOCIAL_SUMMARY)
             .header("Authorization", getTokenHeader())
+            .header("x-xbl-contract-version", "3")
             .GET()
             .build();
 
@@ -580,7 +521,7 @@ public abstract class SessionManagerCore {
             logger.error("Unable to get current friend count", e);
         }
 
-        return new SocialSummaryResponse(-1, -1, false, false, false, false, "", -1, -1, "");
+        return new SocialSummaryResponse(-1, -1, -1, false, false, false, false, "", -1, false, -1, -1, -1, "");
     }
 
     /**

@@ -2,8 +2,10 @@ package com.rtm516.mcxboxbroadcast.core;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import org.cloudburstmc.netty.channel.nethernet.signaling.ClientInfo;
+import org.cloudburstmc.netty.channel.nethernet.signaling.HttpSignalingSettings;
 import org.cloudburstmc.protocol.bedrock.codec.BedrockCodec;
-import org.cloudburstmc.protocol.bedrock.codec.v2169.Bedrock_v2169;
+import org.cloudburstmc.protocol.bedrock.codec.v2225.Bedrock_v2225;
 
 import java.net.URI;
 import java.time.Duration;
@@ -28,14 +30,20 @@ public class Constants {
 
     public static final String PEOPLE = "https://social.xboxlive.com/users/me/people/xuid(%s)";
     public static final String USER_PRESENCE = "https://userpresence.xboxlive.com/users/xuid(%s)/devices/current/titles/current";
-    public static final URI FOLLOWERS = URI.create("https://peoplehub.xboxlive.com/users/me/people/followers");
-    public static final URI SOCIAL = URI.create("https://peoplehub.xboxlive.com/users/me/people/social");
+    public static final URI FRIENDS = URI.create("https://peoplehub.xboxlive.com/users/me/people/friends");
+    public static final URI FRIEND_REQUESTS = URI.create("https://peoplehub.xboxlive.com/users/me/people/friendrequests(received)");
     public static final URI SOCIAL_SUMMARY = URI.create("https://social.xboxlive.com/users/me/summary");
-    public static final String FOLLOWER = "https://social.xboxlive.com/users/me/people/follower/xuid(%s)";
+    public static final String FRIEND = "https://social.xboxlive.com/users/me/people/friends/v2/xuid(%s)";
 
     public static final String GALLERY = "https://persona.franchise.minecraft-services.net/api/v1.0/gallery";
 
     public static final Duration WEBSOCKET_CONNECTION_TIMEOUT = Duration.ofSeconds(10);
+
+    // The session template allows 30 members, rotate before that to leave room for joins in progress
+    public static final int ROTATE_MEMBER_COUNT = 28;
+
+    // How long to keep the old session open after rotating, so players that are mid-join can finish connecting
+    public static final Duration ROTATE_GRACE_PERIOD = Duration.ofSeconds(30);
 
     /**
      * Gathered from scraped web requests, seems to use the below enum
@@ -43,18 +51,21 @@ public class Constants {
      */
     public static final int ConnectionTypeJsonRpc = 7;
 
-    /**
-     * Used to be 1000, but the limit was increased in Aug 2024
-     */
-    public static final int MAX_FRIENDS = 2000;
+    public static final int MAX_FRIENDS = 1000;
 
     /**
-     * Used for the micro nethernet server that transfers the client to the real server
+     * The game version and protocol we advertise in the session
      */
-    public static final BedrockCodec BEDROCK_CODEC = Bedrock_v2169.CODEC;
+    public static final BedrockCodec BEDROCK_CODEC = Bedrock_v2225.CODEC;
+
+    /**
+     * How we query servers over NetherNet HTTP signaling
+     */
+    public static final HttpSignalingSettings HTTP_SIGNALING = HttpSignalingSettings.DEFAULT
+        .withClientInfo(new ClientInfo(BEDROCK_CODEC.getMinecraftVersion(), BEDROCK_CODEC.getProtocolVersion(), -1));
 
     /**
      * Config version for upgrade purposes
      */
-    public static final int CONFIG_VERSION = 2;
+    public static final int CONFIG_VERSION = 8;
 }

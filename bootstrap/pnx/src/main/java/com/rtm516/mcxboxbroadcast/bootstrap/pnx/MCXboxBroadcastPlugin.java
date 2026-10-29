@@ -98,7 +98,7 @@ public final class MCXboxBroadcastPlugin extends PluginBase {
             notificationManager,
             logger
         );
-        sessionManager.setNetherNetPortRange(config.session().icePortRange().min(), config.session().icePortRange().max());
+        sessionManager.setSessionConfig(config.session());
         sessionManager.scheduledThread().execute(this::initializeSession);
     }
 
